@@ -3,3 +3,5 @@ venv/
 mlruns/
 
 scgpt/checkpoints/
+networks/knowledge sources/TFLink_Homo_sapiens_interactions_All_simpleFormat_v1.0.tsv
+networks/knowledge sources/goa_human.gaf

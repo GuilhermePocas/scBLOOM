@@ -48,34 +48,6 @@ if args.dataset == "pbmc":
     obj = obj[obj.obs['celltype'] != "unknown"]
     obj.var_names_make_unique()
 
-##example
-if args.dataset == "example":
-    obj = sc.read_h5ad("./data/example/example.h5ad")
-    cell_types = {"0":"Macrophages","1":"Macrophages","2":"CD8 Tcells","3":"Microglia","4":"Cancer","5":"CD4 Tcells","6":"B Cells","10":"Prolifrating Tcells","8":"Cancer","11":"NK"}
-    obj.obs['celltype'] = obj.obs.seurat_clusters.map(lambda x: cell_types.get(x, "unknown"))
-    obj = obj[obj.obs['celltype'] != "unknown"]
-
-#Baron
-if args.dataset == "baron" :
-    expression_file = "./data/baron/Filtered_Baron_HumanPancreas_data.csv"
-    df = pd.read_csv(expression_file, index_col=0)
-    obj = sc.AnnData(df)
-    obj.X = obj.X.astype(np.float64)
-    obj.var_names = obj.var_names.str.capitalize()
-    labels_file = "./data/baron/Labels-Baron.csv"
-    labels_df = pd.read_csv(labels_file, header=None, names=['label'], skiprows=1)
-    obj.obs["celltype"] = labels_df['label'].values
-
-##Lks21
-if args.dataset == "lks":
-    df = pd.read_csv("./data/lks21/lakatos2021_top3000degs_rawcounts.csv", index_col=0)
-    obj = sc.AnnData(df)
-    labels_file = "./data/lks21/lakatos2021_celltypes_to_cellid.csv"
-    labels_df = pd.read_csv(labels_file, header=0, index_col="CellName")
-    obj.obs["celltype"] = labels_df["CellType"]
-    obj.var_names = obj.var_names.str.capitalize()
-    obj = obj[obj.obs['celltype'] != "Unknown"]
-
 obj_scNET = obj.copy()
 obj_scNET.raw = obj_scNET
 
@@ -126,10 +98,11 @@ if args.scgpt_epochs > 0:
 
 
     obj.var_names = obj.var_names.str.upper()
-    #sc.pp.normalize_total(obj, target_sum=1e4)
-    #sc.pp.log1p(obj)
-    #sc.pp.highly_variable_genes(obj, n_top_genes=2000)
-    #obj = obj[:, obj.var['highly_variable']].copy()
+    sc.pp.normalize_total(obj, target_sum=1e4)
+    sc.pp.log1p(obj)
+    sc.pp.highly_variable_genes(obj, n_top_genes=2000)
+    obj = obj[:, obj.var['highly_variable']].copy()
+    
     train_idx, test_idx = train_test_split(
         obj.obs_names,
         test_size=0.4,
