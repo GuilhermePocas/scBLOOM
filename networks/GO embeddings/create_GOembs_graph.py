@@ -125,4 +125,4 @@ df_edges = df_edges[df_edges["conn"] > 0]
 
 
 # Save to CSV
-df_edges.to_csv("./pbmc-now.csv", index_label="id")
+df_edges.to_csv("../pbmc-GOembs.csv", index_label="id")

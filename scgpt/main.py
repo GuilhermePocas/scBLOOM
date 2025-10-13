@@ -170,7 +170,7 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
     logger = scg.logger
     scg.utils.add_file_handler(logger, save_dir / "run.log")
 
-    data_is_raw = True
+    data_is_raw = False
     filter_gene_by_counts = False
 
 

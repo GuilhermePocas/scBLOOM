@@ -88,4 +88,4 @@ df_edges = df_edges[df_edges["conn"] > 0]
 print(df_edges["conn"].value_counts())
 
 # Save to CSV
-df_edges.to_csv("./pbmc-now.csv", index_label="id")
+df_edges.to_csv("../pbmc-GOpairs.csv", index_label="id")
