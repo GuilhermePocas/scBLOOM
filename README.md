@@ -4,9 +4,6 @@
 ## Overview
 
 ![scBLOOM Overview](docs/methodology.png)
-*Figure 1. Overview of the scBLOOM workflow.*
-
-
 
 **scBLOOM** (single-cell Biologically-enhanced Learning from Ontologies and Omics-based Models) is a computational workflow geared towards cell type classification, with a particular focus on accuratly predicting rare cell types. It achieves this by bridging large-scale, expression-only Foundation Models, known for their accurate predictions, with domain-specific biological knowledge drawn from large graphs of relevant information.
 
@@ -31,7 +28,7 @@ A dockerfile for the required enviroment is also provided, but GPU access ir req
 
 scNET utilizes a gene similarity graph based in PPI information. In ``` ./networks ``` this graph is presented, as well as three others constructed from our own methods. 
 
-These can be found in the corresponding directories, and in order to run them the corresponding knowledge sources must be downloaded from * and placed in ``` ./knowledge sources ```. Then, to run the network creation methods simply run the following command:
+These can be found in the corresponding directories, and in order to run them the corresponding knowledge sources must be downloaded from https://drive.google.com/drive/folders/1SpUsp_cXh0XQnM12uLZuCPDFjTMUTIc8?usp=drive_link and placed in ``` ./knowledge sources ```. Then, to run the network creation methods simply run the following command:
 
 ``` 
 python create_METHOD_graph.py --top_p 100 --var_genes 2000
@@ -77,7 +74,7 @@ The resulting output objects are:
 
 - **labels**: the cell type labels, in the same order as the embeddings.
 
-An example script is provided in ```/main.py```, using the pbmc3k dataset from Scanpy, and the human scGPT model checkpoint, available here *. To run the example simply run the following command:
+An example script is provided in ```/main.py```, using the pbmc3k dataset from Scanpy, and the human scGPT model checkpoint, available here https://drive.google.com/drive/folders/1kKtYwhCkcxgtKDAPb_-Os0dSBvfJbEAQ?usp=drive_link. To run the example simply run the following command:
 
 ```
 python main.py --model_name test --network PPI.csv --scnet_epochs 800 --scgpt_epochs 60
