@@ -2,7 +2,7 @@ __pycache__/
 venv/
 mlruns/
 
-scgpt/checkpoints/scGPT_brain
-scgpt/checkpoints/scGPT_human
-networks/knowledge sources/TFLink_Homo_sapiens_interactions_All_simpleFormat_v1.0.tsv
-networks/knowledge sources/goa_human.gaf
+src/scgpt/checkpoints/scGPT_brain
+src/scgpt/checkpoints/scGPT_human
+src/networks/knowledge sources/TFLink_Homo_sapiens_interactions_All_simpleFormat_v1.0.tsv
+src/networks/knowledge sources/goa_human.gaf

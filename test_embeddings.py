@@ -74,6 +74,12 @@ def test_embeddings( cell_embeddings, labels, method, save_dir):
             X_train = scaler.fit_transform(X_train)
             X_test = scaler.transform(X_test)
 
+            if method == "conq":
+                pca = PCA(n_components=512)
+                pca.fit(X_train)
+                X_train = pca.transform(X_train)
+                X_test = pca.transform(X_test)
+
             X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
             X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
             y_train_tensor = torch.tensor(y_train, dtype=torch.long)
@@ -83,7 +89,7 @@ def test_embeddings( cell_embeddings, labels, method, save_dir):
             train_loader = DataLoader(train_dataset, batch_size = 32, shuffle=True, drop_last=False)
 
             # Initialize model
-            input_size = X.shape[1]
+            input_size = X_train.shape[1]
             num_classes = len(np.unique(y))
             model = Classifier(input_size, num_classes).to(device)
 
