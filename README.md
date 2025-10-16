@@ -3,7 +3,7 @@
 
 ## Overview
 
-![scBLOOM Overview](docs/overview.pdf)
+![scBLOOM Overview](docs/overview.png)
 *Figure 1. Overview of the scBLOOM workflow.*
 
 
