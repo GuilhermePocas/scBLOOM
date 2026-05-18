@@ -9,3 +9,7 @@ src/scgpt/checkpoints/scGPT_brain
 src/scgpt/checkpoints/scGPT_human
 src/networks/knowledge sources/TFLink_Homo_sapiens_interactions_All_simpleFormat_v1.0.tsv
 src/networks/knowledge sources/goa_human.gaf
+
+./scripts/Model Training.ipynb
+scripts/Preprocessing.ipynb
+scripts/Classification.ipynb

@@ -29,9 +29,8 @@ However, due to the large amount of packages this may lead to versioning issues,
 To install all the requirements in a conda environment, simply run:
 
 ```
-conda create --name=condaenv python=3.10
+conda env create -f requirements.yml
 conda activate condaenv
-pip install -r requirements.txt
 ```
 
 Make sure you have an [Anaconda Distribution](https://www.anaconda.com/download) installed.
