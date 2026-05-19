@@ -85,16 +85,25 @@ With *METHOD* being one of the available network creation methods (GOpairs, GOem
 To run the scRepresenter pipeline, first load a scRNAseq dataset using Scanpy. The pipeline automatically downloads the Human scGPT checkpoint, in order to use another organ checkpoint from https://github.com/bowang-lab/scGPT/tree/main#pretrained-scGPT-checkpoints download it and place it in ```./src/scgpt/checkpoints```. Then, run the following function:
 
 ```
-scnet_embs, scgpt_embs, avg_embs, conq_embs, labels = run_scRepresenter(model_name, data, dir, scnet_epochs, scgpt_epochs, parameters_scnet, parameters_scgpt, training_obj)
+scnet_embs, scgpt_embs, avg_embs, conq_embs, labels = 
+    run_scRepresenter(
+        model_name,
+        obj,
+        results_dir, 
+        scnet_epochs, 
+        scgpt_epochs, 
+        parameters_scnet, 
+        parameters_scgpt, 
+        training_obj)
 ```
 
 with the following args:
 
 - **model_name**: the name of the current run.
 
-- **data**: a scRNAseq AnnData object.
+- **obj**: a scRNAseq AnnData object.
 
-- **dir**: the output directory where the results and embeddings will be saved.
+- **results_dir**: the output directory where the results and embeddings will be saved.
 
 - **scnet_epochs**: the number of steps when training scNET.
 
