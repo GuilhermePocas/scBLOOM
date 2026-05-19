@@ -85,22 +85,26 @@ With *METHOD* being one of the available network creation methods (GOpairs, GOem
 To run the scRepresenter pipeline, first load a scRNAseq dataset using Scanpy. The pipeline automatically downloads the Human scGPT checkpoint, in order to use another organ checkpoint from https://github.com/bowang-lab/scGPT/tree/main#pretrained-scGPT-checkpoints download it and place it in ```./src/scgpt/checkpoints```. Then, run the following function:
 
 ```
-scnet_embs, scgpt_embs, avg_embs, conq_embs, labels = run_scRepresenter(model_name, data, network, dir, scnet_epochs, scgpt_epochs)
+scnet_embs, scgpt_embs, avg_embs, conq_embs, labels = run_scRepresenter(model_name, data, dir, scnet_epochs, scgpt_epochs, parameters_scnet, parameters_scgpt, training_obj)
 ```
 
 with the following args:
 
-- **model_name(str)**: the name of the current run.
+- **model_name**: the name of the current run.
 
-- **data(AnnData)**: a scRNAseq AnnData object.
+- **data**: a scRNAseq AnnData object.
 
-- **network(str)**: the file path of the gene similarity network.
+- **dir**: the output directory where the results and embeddings will be saved.
 
-- **dir(str)**: the output directory where the results and embeddings will be saved.
+- **scnet_epochs**: the number of steps when training scNET.
 
-- **scnet_epochs(int)**: the number of steps when training scNET.
+- **scgpt_epochs**: the number of steps when training scGPT.
 
-- **scgpt_epochs(int)**: the number of steps when training scGPT.
+- **parameters_scnet**: a python map with all the parameters for the scNET model.
+
+- **parameters_scgpt**: a python map with all the parameters for the scGPT model.
+
+- **training_obj**: optional AnnData fine-tuning object.
 
 The resulting output objects are:
 
