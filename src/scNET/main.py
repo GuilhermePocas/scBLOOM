@@ -455,9 +455,9 @@ def run_scNET(ann_file, train_obj, save_dir, pre_processing_flag = True ,biogrid
           number_of_batches = train_obj.obs.shape[0] // MAX_CELLS_BATCH_SIZE
 
     if not biogrid_flag:
-      print(pkg_resources.resource_filename(__name__,ann_file))
+      #print(pkg_resources.resource_filename(__name__,ann_file))
 
-      net_raw = pd.read_csv(pkg_resources.resource_filename(__name__,ann_file))[["g1_symbol","g2_symbol","conn"]].drop_duplicates()
+      net_raw = pd.read_csv(ann_file)[["g1_symbol","g2_symbol","conn"]].drop_duplicates()
       net, ppi, node_feature = build_network(train_obj, net_raw,human_flag=human_flag)
       print(f"N genes: {node_feature.shape}")
 

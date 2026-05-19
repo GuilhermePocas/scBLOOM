@@ -31,7 +31,13 @@ dependencies:
   - pip:
       - torch==1.13.0
       - torchtext==0.14.0
+      - pytorch-lightning==1.5.10.post0
       - torch-geometric==2.6.1
       - transformers==4.20.1
       - datasets==2.3.2
       - gseapy==1.1.9
+      - jax==0.4.18
+      - jaxlib==0.4.18
+      - chex==0.1.7
+      - flax==0.7.4
+      - igraph==0.9.11

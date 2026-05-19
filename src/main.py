@@ -5,31 +5,28 @@ import torch
 from .utils import train_scnet, train_scgpt, combine_embeddings
 
 
-def run_scRepresenter(model_name, obj, network, results_dir, scnet_epochs=0, scgpt_epochs=0, parameters_scnet = None, parameters_scgpt = None, training_obj = None):
-
-    # --- Set up directories ---
-    ANN_FILE = "../networks/" + network
+def run_scRepresenter(model_name, obj, results_dir, scnet_epochs=0, scgpt_epochs=0, parameters_scnet = None, parameters_scgpt = None, training_obj = None):
 
     scnet_cell_embeddings = None
     scnet_labels = None
     scgpt_cell_embeddings = None
     scgpt_labels = None
 
-        ## TRAIN SCNET ###
+    ## TRAIN SCNET ###
     if scnet_epochs > 0:
 
         if parameters_scnet == None:
             parameters_scnet = dict(
-                annotation_file=ANN_FILE,
+                annotation_file=os.path.abspath("../networks/PPI.csv"),
                 pre_processing_flag=False,
                 human_flag=False,
                 number_of_batches=1,
                 split_cells=True,
-                max_epoch=scnet_epochs,
                 model_name=model_name,
                 clf_loss=False,
             )
 
+        parameters_scnet["max_epoch"] = scnet_epochs
         scnet_cell_embeddings, scnet_labels = train_scnet(obj, results_dir, parameters_scnet)
         
 
@@ -46,7 +43,6 @@ def run_scRepresenter(model_name, obj, network, results_dir, scnet_epochs=0, scg
                 test_size=0.4,
                 load_model="./src/scgpt/checkpoints/scGPT_human",
                 mask_ratio=0,
-                epochs=scgpt_epochs,
                 n_bins=51,
                 MVC=False, # Masked value prediction for cell embedding
                 ecs_thres=0.0, # Elastic cell similarity objective, 0.0 to 1.0, 0.0 to disable
@@ -67,6 +63,7 @@ def run_scRepresenter(model_name, obj, network, results_dir, scnet_epochs=0, scg
                 DSBN = False,  # Domain-spec batchnorm
             )
 
+        parameters_scgpt["epochs"] = scgpt_epochs
         scgpt_cell_embeddings, scgpt_labels = train_scgpt(obj, results_dir, parameters_scgpt, training_obj)
 
     #### COMBINE BOTH EMBEDDINGS #####
