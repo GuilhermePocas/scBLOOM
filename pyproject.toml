@@ -8,5 +8,12 @@ version = "1.0.0"
 description = "framework for computing biologically informed cellular representations"
 requires-python = ">=3.9,<3.11"
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["screpresenter*"]
+
 [tool.setuptools]
-packages = ["screpresenter"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+scgpt = ["scgpt/tokenizer/*.json"]
