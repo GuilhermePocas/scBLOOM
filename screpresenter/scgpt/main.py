@@ -52,7 +52,7 @@ from torchtext._torchtext import (
     Vocab as VocabPybind,
 )
 from sklearn.metrics import confusion_matrix
-import src.scgpt as scg
+import screpresenter.scgpt as scg
 from .model import TransformerModel, AdversarialDiscriminator
 from .tokenizer import tokenize_and_pad_batch, random_mask_value
 from .loss import (

@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "screpresenter"
+version = "1.0.0"
+description = "framework for computing biologically informed cellular representations"
+requires-python = ">=3.9,<3.11"
+
+[tool.setuptools]
+packages = ["screpresenter"]
