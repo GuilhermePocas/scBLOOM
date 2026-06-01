@@ -1,0 +1,30 @@
+name: bioconda
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python >=3.9,<3.11
+  - numpy >=1.23,<2.0
+  - scipy >=1.9,<2.0
+  - pandas >=1.5,<3.0
+  - scikit-learn >=1.1,<2.0
+  - networkx >=2.8,<4.0
+  - matplotlib-base >=3.6,<4.0
+  - numba >=0.56,<0.60
+  - llvmlite >=0.39,<0.43
+  - scanpy >=1.9,<2.0
+  - anndata >=0.9,<0.11
+  - scikit-misc >=0.2
+  - umap-learn >=0.5.3,<0.6
+  - gseapy >=1.0
+  - pytorch >=1.12,<2.0
+  - torchtext =0.13.1
+  - torch-geometric >=2.0.0,<2.7.0
+  - transformers >=4.30,<5.0
+  - datasets >=2.10,<3.0
+  - tokenizers >=0.13,<0.14
+  - tqdm
+  - gdown >=4.6
+  - setuptools >=65,<70
+  - ipykernel

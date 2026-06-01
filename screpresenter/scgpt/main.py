@@ -37,7 +37,7 @@ import pickle
 import torch
 from anndata import AnnData
 import scanpy as sc
-import scvi
+#import scvi
 import seaborn as sns
 import numpy as np
 from scipy.sparse import issparse

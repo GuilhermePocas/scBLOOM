@@ -16,7 +16,7 @@ dependencies:
   - leidenalg=0.8.10
   - scikit-misc=0.1.4
   - umap-learn=0.5.3
-  - scvi-tools=0.16.4
+  #- scvi-tools=0.16.4
   - numba=0.55.2
   - llvmlite=0.38.1
   - tqdm

@@ -1,15 +1,10 @@
 __pycache__/
 venv/
-.venv/
 mlruns/
 .python-version
 
-output/pbmc3k/
-screpresenter/scgpt/checkpoints/scGPT_brain
-screpresenter/scgpt/checkpoints/scGPT_human
-screpresenter/networks/knowledge sources/TFLink_Homo_sapiens_interactions_All_simpleFormat_v1.0.tsv
-screpresenter/networks/knowledge sources/goa_human.gaf
+output/pbmc3k/*
+screpresenter/scgpt/checkpoints/*
+screpresenter/networks/knowledge sources/*
 
-./scripts/Model Training.ipynb
-scripts/Preprocessing.ipynb
-scripts/Classification.ipynb
+./scripts/*
