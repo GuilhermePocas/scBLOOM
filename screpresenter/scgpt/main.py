@@ -1,25 +1,4 @@
-#!/usr/bin/env python
-# coding: utf-8
 
-# # Fine-tuning on Pre-trained Model for Cell-type Annotation
-# In this tutorial, we demonstrate how to fine-tune a pre-trained model on a new dataset for the cell type annotation task. We use the Multiple Sclerosis dataset as an example and fine-tune on the pre-trained whole-body model. Please download the dataset folder from https://drive.google.com/drive/folders/1Qd42YNabzyr2pWt9xoY4cVMTAxsNBt4v?usp=sharing
-# 
-# We summarize the fine-tuning pipeline in the following steps, which can be used as a general recipe for finetuning on cell-type annotation tasks and beyond: 
-# 
-#      1. Specify hyper-parameter setup for integration task
-#      
-#      2. Load and pre-process data
-#      
-#      3. Load the pre-trained scGPT model
-#      
-#      4. Finetune scGPT with task-specific objectives
-#      
-#      5. Evaluate fine-tuned scGPT
-
-# In[2]:
-
-
-# %%
 import copy
 import gc
 import json
@@ -32,12 +11,10 @@ import traceback
 from typing import List, Tuple, Dict, Union, Optional
 import warnings
 import pandas as pd
-# from . import asyn
 import pickle
 import torch
 from anndata import AnnData
 import scanpy as sc
-#import scvi
 import seaborn as sns
 import numpy as np
 from scipy.sparse import issparse
@@ -64,14 +41,116 @@ from .tokenizer.gene_tokenizer import GeneVocab
 from .preprocess import Preprocessor
 from . import SubsetsBatchSampler
 from .utils import set_seed, category_str2int, eval_scib_metrics
-import umap
 import gdown
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 sc.set_figure_params(figsize=(6, 6))
 os.environ["KMP_WARNINGS"] = "off"
 warnings.filterwarnings('ignore')
 
+# dataset
+class SeqDataset(Dataset):
+    def __init__(self, data: Dict[str, torch.Tensor]):
+        self.data = data
 
+    def __len__(self):
+        return self.data["gene_ids"].shape[0]
+
+    def __getitem__(self, idx):
+        return {k: v[idx] for k, v in self.data.items()}
+
+def prepare_data(tokenized_train, tokenized_valid, train_batch_labels, valid_batch_labels,
+                train_celltype_labels, valid_celltype_labels, train_cell_names, valid_cell_names,
+                mask_ratio, mask_value, pad_value) -> Tuple[Dict[str, torch.Tensor]]:
+    masked_values_train = random_mask_value(
+        tokenized_train["values"],
+        mask_ratio=mask_ratio,
+        mask_value=mask_value,
+        pad_value=pad_value,
+    )
+    masked_values_valid = random_mask_value(
+        tokenized_valid["values"],
+        mask_ratio=mask_ratio,
+        mask_value=mask_value,
+        pad_value=pad_value,
+    )
+    
+    input_gene_ids_train, input_gene_ids_valid = (
+        tokenized_train["genes"],
+        tokenized_valid["genes"],
+    )
+    input_values_train, input_values_valid = masked_values_train, masked_values_valid
+    target_values_train, target_values_valid = (
+        tokenized_train["values"],
+        tokenized_valid["values"],
+    )
+
+    tensor_batch_labels_train = torch.from_numpy(train_batch_labels).long()
+    tensor_batch_labels_valid = torch.from_numpy(valid_batch_labels).long()
+
+    tensor_celltype_labels_train = torch.from_numpy(train_celltype_labels).long()
+    tensor_celltype_labels_valid = torch.from_numpy(valid_celltype_labels).long()
+
+    train_data_pt = {
+        "gene_ids": input_gene_ids_train,
+        "values": input_values_train,
+        "target_values": target_values_train,
+        "batch_labels": tensor_batch_labels_train,
+        "celltype_labels": tensor_celltype_labels_train,
+        "cell_names": train_cell_names,
+    }
+    valid_data_pt = {
+        "gene_ids": input_gene_ids_valid,
+        "values": input_values_valid,
+        "target_values": target_values_valid,
+        "batch_labels": tensor_batch_labels_valid,
+        "celltype_labels": tensor_celltype_labels_valid,
+        "cell_names": valid_cell_names,
+    }
+
+    return train_data_pt, valid_data_pt
+
+def prepare_dataloader(
+    data_pt: Dict[str, torch.Tensor],
+    batch_size: int,
+    shuffle: bool = False,
+    intra_domain_shuffle: bool = False,
+    drop_last: bool = False
+) -> DataLoader:
+    num_workers = min(len(os.sched_getaffinity(0)), batch_size // 2, 4)
+
+    dataset = SeqDataset(data_pt)
+
+    #if per_seq_batch_sample:
+    #    # find the indices of samples in each seq batch
+    #    subsets = []
+    #    batch_labels_array = data_pt["batch_labels"].numpy()
+    #    for batch_label in np.unique(batch_labels_array):
+    #        batch_indices = np.where(batch_labels_array == batch_label)[0].tolist()
+    #        subsets.append(batch_indices)
+    #    data_loader = DataLoader(
+    #        dataset=dataset,
+    #        batch_sampler=SubsetsBatchSampler(
+    #            subsets,
+    #            batch_size,
+    #            intra_subset_shuffle=intra_domain_shuffle,
+    #            inter_subset_shuffle=shuffle,
+    #            drop_last=drop_last,
+    #        ),
+    #        num_workers=num_workers,
+    #        pin_memory=True,
+    #    )
+    #    return data_loader
+
+    data_loader = DataLoader(
+        dataset=dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        drop_last=drop_last,
+        num_workers=num_workers,
+        pin_memory=True,
+    )
+    return data_loader
 
 def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
 
@@ -131,9 +210,6 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
 
     # logging
     log_interval = 100  # iterations
-    save_eval_interval = config["save_eval_interval"]  # epochs
-    do_eval_scib_metrics = True
-
 
     assert input_style in ["normed_raw", "log1p", "binned"]
     assert output_style in ["normed_raw", "log1p", "binned"]
@@ -160,11 +236,6 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
         raise ValueError("ADV and DAB cannot be both True.")
     DAB_separate_optim = True if DAB > 1 else False
 
-
-    # In[ ]:
-
-
-    print(f"save to {save_dir}")
     save_dir = Path(save_dir)
     logger = scg.logger
     scg.utils.add_file_handler(logger, save_dir / "run.log")
@@ -182,9 +253,6 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
     id2type = dict(enumerate(adata.obs["celltype"].astype("category").cat.categories))
     adata.obs["celltype_id"] = celltype_id_labels
     adata.var["gene_name"] = adata.var.index.tolist()
-
-
-    # In[ ]:
 
     if config["load_model"] is not None:
         model_dir = Path(config["load_model"])
@@ -232,9 +300,6 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
         nlayers = model_configs["nlayers"]
         n_layers_cls = model_configs["n_layers_cls"]
 
-    # In[ ]:
-
-
     # set up the preprocessor, use the args to config the workflow
     preprocessor = Preprocessor(
         use_key="X",  # the key in adata.layers to use as raw data
@@ -251,18 +316,9 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
     )
     adata_test = adata[adata.obs["str_batch"] == "1"]
     adata = adata[adata.obs["str_batch"] == "0"]
-    
-    #adata.layers['X_normed'] = adata.X.copy()
-    #adata.layers['X_binned'] = adata.X.copy()
-    
-    #adata_test.layers['X_normed'] = adata_test.X.copy()
-    #adata_test.layers['X_binned'] = adata_test.X.copy()
 
     preprocessor(adata, batch_key=None)
     preprocessor(adata_test, batch_key=None)
-
-    # In[ ]:
-
 
     input_layer_key = {  # the values of this map coorespond to the keys in preprocessing
         "normed_raw": "X_normed",
@@ -297,8 +353,6 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
         all_counts, celltypes_labels, batch_ids, cell_names, test_size=0.1, shuffle=True
     )
 
-    # In[ ]:
-
 
     if config["load_model"] is None:
         vocab = Vocab(
@@ -306,9 +360,6 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
         )  # bidirectional lookup [gene <-> int]
     vocab.set_default_index(vocab["<pad>"])
     gene_ids = np.array(vocab(genes), dtype=int)
-
-
-    # In[ ]:
 
 
     tokenized_train = tokenize_and_pad_batch(
@@ -339,176 +390,6 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
         f"valid set number of samples: {tokenized_valid['genes'].shape[0]}, "
         f"\n\t feature length: {tokenized_valid['genes'].shape[1]}"
     )
-
-
-    # In[ ]:
-
-
-    def prepare_data(sort_seq_batch=False) -> Tuple[Dict[str, torch.Tensor]]:
-        masked_values_train = random_mask_value(
-            tokenized_train["values"],
-            mask_ratio=mask_ratio,
-            mask_value=mask_value,
-            pad_value=pad_value,
-        )
-        masked_values_valid = random_mask_value(
-            tokenized_valid["values"],
-            mask_ratio=mask_ratio,
-            mask_value=mask_value,
-            pad_value=pad_value,
-        )
-        print(
-            f"random masking at epoch {epoch:3d}, ratio of masked values in train: ",
-            f"{(masked_values_train == mask_value).sum() / (masked_values_train - pad_value).count_nonzero():.4f}",
-        )
-
-        input_gene_ids_train, input_gene_ids_valid = (
-            tokenized_train["genes"],
-            tokenized_valid["genes"],
-        )
-        input_values_train, input_values_valid = masked_values_train, masked_values_valid
-        target_values_train, target_values_valid = (
-            tokenized_train["values"],
-            tokenized_valid["values"],
-        )
-
-        tensor_batch_labels_train = torch.from_numpy(train_batch_labels).long()
-        tensor_batch_labels_valid = torch.from_numpy(valid_batch_labels).long()
-
-        tensor_celltype_labels_train = torch.from_numpy(train_celltype_labels).long()
-        tensor_celltype_labels_valid = torch.from_numpy(valid_celltype_labels).long()
-
-        if sort_seq_batch:  # TODO: update to random pick seq source in each traning batch
-            train_sort_ids = np.argsort(train_batch_labels)
-            input_gene_ids_train = input_gene_ids_train[train_sort_ids]
-            input_values_train = input_values_train[train_sort_ids]
-            target_values_train = target_values_train[train_sort_ids]
-            tensor_batch_labels_train = tensor_batch_labels_train[train_sort_ids]
-            tensor_celltype_labels_train = tensor_celltype_labels_train[train_sort_ids]
-
-            valid_sort_ids = np.argsort(valid_batch_labels)
-            input_gene_ids_valid = input_gene_ids_valid[valid_sort_ids]
-            input_values_valid = input_values_valid[valid_sort_ids]
-            target_values_valid = target_values_valid[valid_sort_ids]
-            tensor_batch_labels_valid = tensor_batch_labels_valid[valid_sort_ids]
-            tensor_celltype_labels_valid = tensor_celltype_labels_valid[valid_sort_ids]
-
-        train_data_pt = {
-            "gene_ids": input_gene_ids_train,
-            "values": input_values_train,
-            "target_values": target_values_train,
-            "batch_labels": tensor_batch_labels_train,
-            "celltype_labels": tensor_celltype_labels_train,
-            "cell_names": train_cell_names,
-        }
-        valid_data_pt = {
-            "gene_ids": input_gene_ids_valid,
-            "values": input_values_valid,
-            "target_values": target_values_valid,
-            "batch_labels": tensor_batch_labels_valid,
-            "celltype_labels": tensor_celltype_labels_valid,
-            "cell_names": valid_cell_names,
-        }
-
-        return train_data_pt, valid_data_pt
-
-    def prepare_full_data():
-        all_data = np.concatenate([train_data, valid_data], axis=0)
-        all_celltypes = np.concatenate([train_celltype_labels, valid_celltype_labels], axis=0)
-        all_batches = np.concatenate([train_batch_labels, valid_batch_labels], axis=0)
-        all_names = np.concatenate([train_cell_names, valid_cell_names], axis=0)
-
-        max_seq_len = max([np.count_nonzero(cell) for cell in all_data]) + 1  # CLS
-
-        tokenized = tokenize_and_pad_batch(
-            all_data,
-            gene_ids,
-            max_len=max_seq_len,
-            vocab=vocab,
-            pad_token=pad_token,
-            pad_value=pad_value,
-            append_cls=True,
-            include_zero_gene=include_zero_gene,
-        )
-
-        masked_values = random_mask_value(
-            tokenized["values"],
-            mask_ratio=mask_ratio,
-            mask_value=mask_value,
-            pad_value=pad_value,
-        )
-
-        full_data_pt = {
-            "gene_ids": tokenized["genes"],
-            "values": masked_values,
-            "target_values": tokenized["values"],
-            "batch_labels": torch.from_numpy(all_batches).long(),
-            "celltype_labels": torch.from_numpy(all_celltypes).long(),
-            "cell_names": all_names,  # Optional
-        }
-
-        return full_data_pt
-
-
-    # dataset
-    class SeqDataset(Dataset):
-        def __init__(self, data: Dict[str, torch.Tensor]):
-            self.data = data
-
-        def __len__(self):
-            return self.data["gene_ids"].shape[0]
-
-        def __getitem__(self, idx):
-            return {k: v[idx] for k, v in self.data.items()}
-
-
-    # data_loader
-    def prepare_dataloader(
-        data_pt: Dict[str, torch.Tensor],
-        batch_size: int,
-        shuffle: bool = False,
-        intra_domain_shuffle: bool = False,
-        drop_last: bool = False
-    ) -> DataLoader:
-        num_workers = min(len(os.sched_getaffinity(0)), batch_size // 2, 4)
-
-        dataset = SeqDataset(data_pt)
-
-        if per_seq_batch_sample:
-            # find the indices of samples in each seq batch
-            subsets = []
-            batch_labels_array = data_pt["batch_labels"].numpy()
-            for batch_label in np.unique(batch_labels_array):
-                batch_indices = np.where(batch_labels_array == batch_label)[0].tolist()
-                subsets.append(batch_indices)
-            data_loader = DataLoader(
-                dataset=dataset,
-                batch_sampler=SubsetsBatchSampler(
-                    subsets,
-                    batch_size,
-                    intra_subset_shuffle=intra_domain_shuffle,
-                    inter_subset_shuffle=shuffle,
-                    drop_last=drop_last,
-                ),
-                num_workers=num_workers,
-                pin_memory=True,
-            )
-            return data_loader
-
-        data_loader = DataLoader(
-            dataset=dataset,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            drop_last=drop_last,
-            num_workers=num_workers,
-            pin_memory=True,
-        )
-        return data_loader
-
-
-    # ## Step 3: Load the pre-trained scGPT model
-
-    # In[ ]:
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
@@ -543,9 +424,7 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
     if config["load_model"] is not None:
         try:
             model.load_state_dict(torch.load(model_file))
-            #logger.info(f"Loading all model params from {model_file}")
         except:
-            # only load params that are in the model and match the size
             model_dict = model.state_dict()
             pretrained_dict = torch.load(model_file, map_location=device)
             pretrained_dict = {
@@ -553,20 +432,13 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
                 for k, v in pretrained_dict.items()
                 if k in model_dict and v.shape == model_dict[k].shape
             }
-            #for k, v in pretrained_dict.items():
-                #logger.info(f"Loading params {k} with shape {v.shape}")
             model_dict.update(pretrained_dict)
             model.load_state_dict(model_dict)
 
     pre_freeze_param_count = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters() if p.requires_grad).values())
 
-    # Freeze all pre-decoder weights
     for name, para in model.named_parameters():
-        #print("-"*20)
-        #print(f"name: {name}")
         if config["freeze"] and "encoder" in name and "transformer_encoder" not in name:
-        # if config.freeze and "encoder" in name:
-            #print(f"freezing weights for: {name}")
             para.requires_grad = False
 
     post_freeze_param_count = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters() if p.requires_grad).values())
@@ -582,9 +454,6 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
             d_model=embsize,
             n_cls=num_batch_types,
         ).to(device)
-
-
-    # In[ ]:
 
     criterion = masked_mse_loss
     criterion_cls = nn.CrossEntropyLoss()
@@ -612,9 +481,6 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
         )
 
     scaler = torch.cuda.amp.GradScaler(enabled=config["amp"])
-
-
-    # In[ ]:
 
 
     def train(model: nn.Module, loader: DataLoader, global_step: int) -> Tuple[Dict, Dict, int]:
@@ -930,19 +796,25 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
         return total_loss / total_num, total_error / total_num
 
 
-    # ## Step 4: Finetune scGPT with task-specific objectives
-
-    # In[ ]:
-
-
     best_val_loss = float("inf")
-    best_avg_bio = 0.0
     best_model = None
     global_step=0
     for epoch in range(1, epochs + 1):
 
         epoch_start_time = time.time()
-        train_data_pt, valid_data_pt = prepare_data(sort_seq_batch=per_seq_batch_sample)
+        train_data_pt, valid_data_pt = prepare_data(
+                tokenized_train=tokenized_train,
+                tokenized_valid=tokenized_valid,
+                train_batch_labels=train_batch_labels,
+                valid_batch_labels=valid_batch_labels,
+                train_celltype_labels=train_celltype_labels,
+                valid_celltype_labels=valid_celltype_labels,
+                train_cell_names=train_cell_names,
+                valid_cell_names=valid_cell_names,
+                mask_ratio=mask_ratio,
+                mask_value=mask_value,
+                pad_value=pad_value
+        )
         train_loader = prepare_dataloader(
             train_data_pt,
             batch_size=batch_size,
@@ -979,7 +851,6 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             best_model = copy.deepcopy(model)
-            best_model_epoch = epoch
             logger.info(f"Best model with score {best_val_loss:5.4f}")
 
         scheduler.step()
@@ -988,9 +859,6 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
         if ADV:
             scheduler_D.step()
             scheduler_E.step()
-
-
-    # In[ ]:
 
 
     # %% inference
@@ -1053,20 +921,18 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
             return_raw=True,
         )
 
-        # Retrieve the data-independent gene embeddings from scGPT
-        gene2idx = vocab.get_stoi()
-        final_gene_ids = np.array([id for id in gene2idx.values()])
-        gene_embeddings = model.encoder(torch.tensor(final_gene_ids, dtype=torch.long).to(device))
-        gene_embeddings = gene_embeddings.detach().cpu().numpy()
-        # Filter on the intersection between the Immune Human HVGs found in step 1.2 and scGPT's 30+K foundation model vocab
-        gene_embeddings = {gene: gene_embeddings[i] for i, gene in enumerate(gene2idx.keys()) if gene in adata.var.index.tolist()}
-        print('Retrieved gene embeddings for {} genes.'.format(len(gene_embeddings)))
+        ## Retrieve the data-independent gene embeddings from scGPT
+        #gene2idx = vocab.get_stoi()
+        #final_gene_ids = np.array([id for id in gene2idx.values()])
+        #gene_embeddings = model.encoder(torch.tensor(final_gene_ids, dtype=torch.long).to(device))
+        #gene_embeddings = gene_embeddings.detach().cpu().numpy()
+        ## Filter on the intersection between the Immune Human HVGs found in step 1.2 and scGPT's 30+K foundation model vocab
+        #gene_embeddings = {gene: gene_embeddings[i] for i, gene in enumerate(gene2idx.keys()) if gene in adata.var.index.tolist()}
+        #print('Retrieved gene embeddings for {} genes.'.format(len(gene_embeddings)))
+        #
+        #with open(save_dir / "gene_embeddings.pkl", "wb+") as f:
+        #    pickle.dump(gene_embeddings, f)
         
-        with open(save_dir / "gene_embeddings.pkl", "wb+") as f:
-            pickle.dump(gene_embeddings, f)
-
-        # compute accuracy, precision, recall, f1
-        from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
         accuracy = accuracy_score(celltypes_labels, predictions)
         precision = precision_score(celltypes_labels, predictions, average="macro")
@@ -1087,21 +953,7 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
 
         return predictions,celltypes_labels, results, embeddings, cls
 
-
-    # ## Step 5: Inference with fine-tuned scGPT model
-    # In the cell-type annotation task, the fine-tuned scGPT predicts cell-type labels for query set as inference. The model performance is evaluated on standard classificaton metrics. Here we visualize the predicted labels over the scGPT cell embeddings, and present the confusion matrix for detailed classification performance on the cell-group level.
-
-    # In[ ]:
-
-
     predictions, labels, results, test_embeddings, test_cls = test(best_model, adata_test)
-    #adata_test_raw.obs["predictions"] = [id2type[p] for p in predictions]
-
-    # plot
-    palette_ = plt.rcParams["axes.prop_cycle"].by_key()["color"] 
-    palette_ = plt.rcParams["axes.prop_cycle"].by_key()["color"] + plt.rcParams["axes.prop_cycle"].by_key()["color"] + plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    palette_ = {c: palette_[i] for i, c in enumerate(celltypes)}
-
 
     save_dict = {
         "predictions": predictions,
@@ -1125,61 +977,4 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
         pickle.dump(train_cls, f)
 
 
-    # In[ ]:
-
-
-    #from sklearn.metrics import confusion_matrix
-    #celltypes = sorted(list(set([id2type[p] for p in predictions] + list(celltypes))))
-    #for i in set([id2type[p] for p in predictions]):
-    #    if i not in celltypes:
-    #        celltypes.remove(i)
-    #cm = confusion_matrix(labels, predictions)
-    #cm = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
-    #cm = pd.DataFrame(cm, index=celltypes[:cm.shape[0]], columns=celltypes[:cm.shape[1]])
-    #plt.figure(figsize=(20, 20))
-    #ax = sns.heatmap(cm, annot=True, fmt=".3f", cmap="Blues", cbar_kws={"shrink": 0.75}, annot_kws={"size": 18} )
-    #ax.set_xticklabels(
-    #    ax.get_xticklabels(),
-    #    rotation=45,
-    #    horizontalalignment='right',
-    #    fontsize=14
-    #)
-    #ax.set_yticklabels(
-    #    ax.get_yticklabels(),
-    #    rotation=0,
-    #    fontsize=14
-    #)
-    #ax.set_xlabel("Predicted Label", fontsize=16)
-    #ax.set_ylabel("True Label", fontsize=16)
-    #plt.tight_layout()
-    #plt.savefig(save_dir / "confusion_matrix.png", dpi=300)
-
-
-
-    ## Perform UMAP
-#
-    #umap_model = umap.UMAP()
-    #umap_embedding = umap_model.fit_transform(np.array(list(test_cls.values())))
-#
-    ## Create a UMAP plot with cell classes
-    #plt.figure(figsize=(20, 10))
-    #sns.scatterplot(
-    #    x=umap_embedding[:, 0],
-    #    y=umap_embedding[:, 1],
-    #    hue=[id2type[p] for p in predictions],
-    #    palette="tab10",
-    #    s=20,
-    #    alpha=0.8
-    #)
-#
-    #plt.xlabel('UMAP 1', fontsize=12)
-    #plt.ylabel('UMAP 2', fontsize=12)
-    #plt.legend(title="Cell Types", bbox_to_anchor=(1.05, 1), loc='upper left')
-    #plt.tight_layout()  # Adjust the layout to ensure everything fits without overlap
-    #plt.savefig(save_dir / "embeddings_umap.png", dpi=300)
-
-    # In[ ]:
-
-
-    # save the model into the save_dir
     torch.save(best_model.state_dict(), save_dir / "model.pt")

@@ -30,30 +30,21 @@ def train_scnet(obj, dir, cfg):
     return scnet_cell_embeddings, scnet_labels
 
 
-def train_scgpt(obj, dir, cfg, training_obj=None):
+def train_scgpt(obj, dir, cfg):
 
     obj_scGPT = obj.copy()
     obj_scGPT.var_names = obj_scGPT.var_names.str.upper()
 
-    if training_obj is None:
+    train_idx, test_idx = train_test_split(
+        obj_scGPT.obs_names,
+        test_size=cfg['test_size'],
+        stratify=obj.obs["celltype"],  # Ensure class balance
+        random_state=42
+    )
 
-        train_idx, test_idx = train_test_split(
-            obj_scGPT.obs_names,
-            test_size=cfg['test_size'],
-            stratify=obj.obs["celltype"],  # Ensure class balance
-            random_state=42
-        )
+    obj_scGPT_test = obj_scGPT[test_idx].copy()
+    obj_scGPT_train = obj_scGPT[train_idx].copy()
 
-        obj_scGPT_test = obj_scGPT[test_idx].copy()
-        obj_scGPT_train = obj_scGPT[train_idx].copy()
-
-    else:
-
-        obj_scGPT_train = training_obj
-        obj_scGPT_test = obj_scGPT.copy()
-
-    #obj_scGPT_train.obs["batch_id"] = obj_scGPT_train.obs["str_batch"] = "0"
-    #obj_scGPT_test.obs["batch_id"] = obj_scGPT_test.obs["str_batch"] = "1"
     obj_scGPT_batch = obj_scGPT_train.concatenate(obj_scGPT_test, batch_key="str_batch")
 
     scGPT_dir = dir + "/scGPT"

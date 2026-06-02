@@ -2,7 +2,7 @@ import os
 from .utils import train_scnet, train_scgpt, combine_embeddings
 
 
-def run_scRepresenter(model_name, obj, results_dir, scnet_epochs=0, scgpt_epochs=0, parameters_scnet = None, parameters_scgpt = None, training_obj = None):
+def run_scRepresenter(model_name, obj, results_dir, scnet_epochs=0, scgpt_epochs=0, parameters_scnet = None, parameters_scgpt = None):
 
     scnet_cell_embeddings = None
     scnet_labels = None
@@ -61,7 +61,7 @@ def run_scRepresenter(model_name, obj, results_dir, scnet_epochs=0, scgpt_epochs
             )
 
         parameters_scgpt["epochs"] = scgpt_epochs
-        scgpt_cell_embeddings, scgpt_labels = train_scgpt(obj, results_dir, parameters_scgpt, training_obj)
+        scgpt_cell_embeddings, scgpt_labels = train_scgpt(obj, results_dir, parameters_scgpt)
 
     #### COMBINE BOTH EMBEDDINGS #####
     if scnet_epochs > 0 and scgpt_epochs > 0:
