@@ -17,9 +17,7 @@ def train_scnet(obj, dir, cfg):
         
     scNET_dir = dir + "/scNET"
     os.makedirs(scNET_dir, exist_ok=True)
-    run_scNET(cfg["annotation_file"], obj_scNET, scNET_dir ,pre_processing_flag=cfg["pre_processing_flag"], human_flag=cfg["human_flag"],
-                        number_of_batches=cfg["number_of_batches"], split_cells=cfg["split_cells"], max_epoch=cfg["max_epoch"],
-                        model_name = cfg["model_name"], clf_loss=cfg["clf_loss"])
+    run_scNET(cfg["annotation_file"], obj_scNET, scNET_dir , cfg)
 
     embedded_genes, embedded_cells, node_features , out_features, ids =  load_embeddings(cfg["model_name"], scNET_dir)
     recon_obj = create_reconstructed_obj(node_features, out_features, obj_scNET)
@@ -38,7 +36,7 @@ def train_scgpt(obj, dir, cfg):
     train_idx, test_idx = train_test_split(
         obj_scGPT.obs_names,
         test_size=cfg['test_size'],
-        stratify=obj.obs["celltype"],  # Ensure class balance
+        stratify=obj.obs["celltype"], 
         random_state=42
     )
 
@@ -49,7 +47,7 @@ def train_scgpt(obj, dir, cfg):
 
     scGPT_dir = dir + "/scGPT"
     os.makedirs(scGPT_dir, exist_ok=True)
-    run_scGPT(cfg["model_name"], cfg ,obj_scGPT_batch, scGPT_dir)
+    run_scGPT(cfg ,obj_scGPT_batch, scGPT_dir)
 
     with open(scGPT_dir + "/test_cell_embeddings.pkl", "rb") as f:
         test_cell_embeddings = pickle.load(f)
@@ -67,7 +65,6 @@ def combine_embeddings(obj, scnet_emb, scgpt_emb, dir):
     obj_common = obj[common_test_idx].copy()
     print(f"Test cells in common: {len(common_test_idx)} / {len(scgpt_emb.index)}")
 
-    # Subset to only common cells
     common_scnet_embs = scnet_emb.loc[common_test_idx]
     common_scgpt_embs = scgpt_emb.loc[common_test_idx]
 

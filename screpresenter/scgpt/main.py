@@ -152,7 +152,7 @@ def prepare_dataloader(
     )
     return data_loader
 
-def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
+def run_scGPT(hyperparameter_defaults, adata, save_dir):
 
     config = hyperparameter_defaults
 
@@ -240,8 +240,8 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
     logger = scg.logger
     scg.utils.add_file_handler(logger, save_dir / "run.log")
 
-    data_is_raw = False
-    filter_gene_by_counts = False
+    data_is_raw = config["data_is_raw"]
+    filter_gene_by_counts = config["filter_gene_by_counts"]
 
 
     # make the batch category column
@@ -293,6 +293,9 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
             f"Resume model from {model_file}, the model args will override the "
             f"config {model_config_file}."
         )
+
+        with open(save_dir / "args.json", "w") as f:
+            json.dump(model_configs, f, indent=2)
 
         embsize = model_configs["embsize"]
         nhead = model_configs["nheads"]
@@ -970,11 +973,14 @@ def run_scGPT(model_name, hyperparameter_defaults, adata, save_dir):
     with open(save_dir / "test_cls_output.pkl", "wb+") as f:
         pickle.dump(test_cls, f)
 
-    with open(save_dir / "train_cell_embeddings.pkl", "wb+") as f:
-        pickle.dump(train_embs, f)
+    if config["do_train"]:
+        with open(save_dir / "train_cell_embeddings.pkl", "wb+") as f:
+            pickle.dump(train_embs, f)
 
-    with open(save_dir / "train_cls_output.pkl", "wb+") as f:
-        pickle.dump(train_cls, f)
+        with open(save_dir / "train_cls_output.pkl", "wb+") as f:
+            pickle.dump(train_cls, f)
 
 
-    torch.save(best_model.state_dict(), save_dir / "model.pt")
+    torch.save(best_model.state_dict(), save_dir / "best_model.pt")
+
+

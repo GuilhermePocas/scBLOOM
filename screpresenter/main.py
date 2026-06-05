@@ -16,11 +16,21 @@ def run_scRepresenter(model_name, obj, results_dir, scnet_epochs=0, scgpt_epochs
             parameters_scnet = dict(
                 annotation_file=os.path.abspath("../networks/PPI.csv"),
                 pre_processing_flag=False,
+                biogrid_flag=False,
                 human_flag=False,
                 number_of_batches=1,
                 split_cells=True,
+                n_neighbors=25,
                 model_name=model_name,
                 clf_loss=False,
+                inter_dim=250,
+                embedding_dim=512,
+                network_cutoff=0.2,
+                max_cells_batch_ize=4000,
+                max_cells_for_spliting=10000,
+                expression_cutoff=0.05,
+                num_layers=3,
+                de_genes_num=2000
             )
 
         parameters_scnet["max_epoch"] = scnet_epochs
@@ -69,7 +79,6 @@ def run_scRepresenter(model_name, obj, results_dir, scnet_epochs=0, scgpt_epochs
         common_scnet_embs, common_scgpt_embs, avg_combined_embs, conq_combined_embs, common_labels = \
         combine_embeddings(obj, scnet_cell_embeddings, scgpt_cell_embeddings, results_dir)
         
-
         return common_scnet_embs, common_scgpt_embs, avg_combined_embs, conq_combined_embs, common_labels
     
 

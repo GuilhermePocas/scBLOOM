@@ -4,7 +4,8 @@ mlruns/
 .python-version
 
 output/pbmc3k/*
+output/pbmc1k/*
 screpresenter/scgpt/checkpoints/*
 screpresenter/networks/knowledge sources/*
 
-./scripts/*
+scripts/*

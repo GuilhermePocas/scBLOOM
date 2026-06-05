@@ -18,18 +18,9 @@ import pkg_resources
 from tqdm import tqdm
 import warnings
 import torch.nn as nn
-from sklearn.model_selection import train_test_split
-import pickle
 
 
-INTER_DIM = 250
-EMBEDDING_DIM = 512
-NETWORK_CUTOFF = 0.2
-MAX_CELLS_BATCH_SIZE = 4000
-MAX_CELLS_FOR_SPLITING = 10000
-EXPRESSION_CUTOFF = 0.05
-NUM_LAYERS = 3
-DE_GENES_NUM=2000
+
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 warnings.filterwarnings('ignore')
@@ -71,7 +62,7 @@ class CellClassifier(nn.Module):
         return self.model(x)
 
 
-def build_network(obj, net, biogrid_flag = False, human_flag = False):
+def build_network(obj, net, network_cutoff, expression_cutoff, biogrid_flag = False, human_flag = False):
     """
     Build a gene-gene network from the provided interaction information.
     Args:
@@ -87,7 +78,7 @@ def build_network(obj, net, biogrid_flag = False, human_flag = False):
     """
     if not biogrid_flag:
         net.columns = ["Source","Target","Conn"]
-        net = net.loc[net.Conn >= NETWORK_CUTOFF]
+        net = net.loc[net.Conn >= network_cutoff]
     
     else:
          net.columns = ["Source","Target"]
@@ -100,7 +91,7 @@ def build_network(obj, net, biogrid_flag = False, human_flag = False):
     genes =  obj.var[obj.var.index.isin(genes)].index
     node_feature = sc.get.obs_df(obj.raw.to_adata(),list(genes)).T
     node_feature["non_zero"] = node_feature.apply(lambda x: x.astype(bool).sum(), axis=1)
-    node_feature = node_feature.loc[node_feature.non_zero > node_feature.shape[1] * EXPRESSION_CUTOFF]
+    node_feature = node_feature.loc[node_feature.non_zero > node_feature.shape[1] * expression_cutoff]
     node_feature.drop("non_zero",axis=1,inplace=True)
 
     net = net.loc[net.Source != net.Target]
@@ -163,8 +154,7 @@ def crate_knn_batch(knn,idxs,k=15):
   knn_edge_index = torch.unique(knn_edge_index, dim=1)
   return knn_edge_index.to(device)
 
-def train(data, loader, highly_variable_index, save_dir ,number_of_batches=5 ,
-          max_epoch = 500, rduce_interavel = 30,model_name="", cell_flag=False, num_classes=None, 
+def train(data, loader, highly_variable_index, save_dir , cfg, rduce_interavel = 30, num_classes=None, 
           lambda_rows=1, lambda_cols=1, lambda_clf=1):
     """
       Train the scNET model using mini-batches of the k-NN graph or cells.
@@ -194,27 +184,22 @@ def train(data, loader, highly_variable_index, save_dir ,number_of_batches=5 ,
         torch.utils.data.DataLoader: DataLoader object for batching edges.
     """
 
-    
-    params = {
-        "model_name": model_name,
-        "num_epochs": max_epoch,
-        "inter_dim": INTER_DIM,
-        "embedding_dim": EMBEDDING_DIM,
-        "network_cutoff": NETWORK_CUTOFF,
-        "max_cells_batch_size": MAX_CELLS_BATCH_SIZE,
-        "max_cells_for_splitting": MAX_CELLS_FOR_SPLITING,
-        "expression_cutoff": EXPRESSION_CUTOFF,
-        "num_layers": NUM_LAYERS,
-        "de_genes_num": DE_GENES_NUM
-    }
+    max_epoch = cfg["max_epoch"]
+    cell_flag = cfg["split_cells"]
+    model_name = cfg["model_name"]
+    number_of_batches = cfg["number_of_batches"]
+    inter_dim = cfg["inter_dim"]
+    embedding_dim = cfg["embedding_dim"]
+    num_layers = cfg["num_layers"]
+
       
     x_full = data.x.clone()
     if cell_flag:
       model = scNET(x_full.shape[0], x_full.shape[1]//number_of_batches,
-                                INTER_DIM, EMBEDDING_DIM, INTER_DIM, EMBEDDING_DIM,num_layers=NUM_LAYERS).to(device)
+                                inter_dim, embedding_dim, inter_dim, embedding_dim, num_layers=num_layers).to(device)
     else:
-      model = scNET(x_full.shape[0], x_full.shape[1], INTER_DIM, EMBEDDING_DIM, INTER_DIM, EMBEDDING_DIM, 
-                                num_layers=NUM_LAYERS).to(device)
+      model = scNET(x_full.shape[0], x_full.shape[1], inter_dim, embedding_dim, inter_dim, embedding_dim, 
+                                num_layers=num_layers).to(device)
       x = x_full.clone()
       x = ((x.T - (x.mean(axis=1)))/ (x.std(axis=1)+ 0.00001)).T
 
@@ -225,7 +210,7 @@ def train(data, loader, highly_variable_index, save_dir ,number_of_batches=5 ,
     concat_flag = False
 
     if num_classes>0:
-      clf = CellClassifier(input_size=EMBEDDING_DIM, num_classes=num_classes).to(device)
+      clf = CellClassifier(input_size=embedding_dim, num_classes=num_classes).to(device)
       clf_optimizer = torch.optim.Adam(clf.parameters(), lr=0.0001)
       clf_criterion = nn.CrossEntropyLoss()
 
@@ -328,7 +313,6 @@ def train(data, loader, highly_variable_index, save_dir ,number_of_batches=5 ,
               knn_edge_index = new_knn_edge_index
 
           if (epoch+1) % rduce_interavel == 0:
-              #print(new_knn_edge_index.shape[1] / loader.dataset.edge_index.shape[0])
               loader = mini_batch_knn(new_knn_edge_index, new_knn_edge_index.shape[1] // number_of_batches)
 
         if epoch%10 == 0:
@@ -409,9 +393,7 @@ def nx_to_pyg_edge_index(G, mapping=None):
         edge_index[1, i] = mapping[dst]
     return edge_index, mapping
 
-def run_scNET(ann_file, train_obj, save_dir, pre_processing_flag = True ,biogrid_flag = False,
-          human_flag=False,number_of_batches=5,split_cells = False, n_neighbors=25,
-          max_epoch=150, model_name="", save_model_flag = False, clf_loss = False):
+def run_scNET(ann_file, train_obj, save_dir, cfg, save_model_flag = False):
     """
     Main function to load data, build networks, and run the scNET training pipeline.
     Args:
@@ -428,6 +410,17 @@ def run_scNET(ann_file, train_obj, save_dir, pre_processing_flag = True ,biogrid
     Returns:
       scNET: A trained scNET model.
     """
+    pre_processing_flag = cfg["pre_processing_flag"]
+    biogrid_flag = cfg["biogrid_flag"]
+    human_flag = cfg["human_flag"]
+    number_of_batches = cfg["number_of_batches"]
+    split_cells = cfg["split_cells"]
+    n_neighbors = cfg["n_neighbors"]
+    model_name = cfg["model_name"]
+    clf_loss = cfg["clf_loss"]
+    max_cells_batch_size = cfg["max_cells_batch_size"]
+    max_cells_for_spliting = cfg["max_cells_for_spliting"]
+    de_genes_num = cfg["de_genes_num"]
 
     if pre_processing_flag:
        train_obj = pre_processing(train_obj,n_neighbors)
@@ -446,25 +439,24 @@ def run_scNET(ann_file, train_obj, save_dir, pre_processing_flag = True ,biogrid
       labels = None
       num_classes = -1
     
-    if train_obj.obs.shape[0] > MAX_CELLS_FOR_SPLITING:
+    if train_obj.obs.shape[0] > max_cells_for_spliting:
        split_cells = True
     
     if split_cells:
        batch_size = train_obj.obs.shape[0] // number_of_batches
-       if batch_size > MAX_CELLS_BATCH_SIZE:
-          number_of_batches = train_obj.obs.shape[0] // MAX_CELLS_BATCH_SIZE
+       if batch_size > max_cells_batch_size:
+          number_of_batches = train_obj.obs.shape[0] // max_cells_batch_size
 
     if not biogrid_flag:
-      #print(pkg_resources.resource_filename(__name__,ann_file))
 
       net_raw = pd.read_csv(ann_file)[["g1_symbol","g2_symbol","conn"]].drop_duplicates()
-      net, ppi, node_feature = build_network(train_obj, net_raw,human_flag=human_flag)
+      net, ppi, node_feature = build_network(train_obj, net_raw, cfg["network_cutoff"], cfg["expression_cutoff"], human_flag=human_flag)
       print(f"N genes: {node_feature.shape}")
 
     else:
       print(pkg_resources.resource_filename(__name__,r"Data/BIOGRID.tab.txt"))
       net_raw = pd.read_table(pkg_resources.resource_filename(__name__,r"Data/BIOGRID.tab.txt"))[["OFFICIAL_SYMBOL_A","OFFICIAL_SYMBOL_B"]].drop_duplicates()
-      net, ppi, node_feature  = build_network(train_obj, net_raw, biogrid_flag,human_flag)
+      net, ppi, node_feature  = build_network(train_obj, net_raw, cfg["network_cutoff"], cfg["expression_cutoff"], biogrid_flag,human_flag)
       print(f"N genes: {node_feature.shape}")
 
     ppi_edge_index, _ = nx_to_pyg_edge_index(ppi)
@@ -472,7 +464,7 @@ def run_scNET(ann_file, train_obj, save_dir, pre_processing_flag = True ,biogrid
 
     if split_cells:
       train_obj = train_obj[:,node_feature.index]
-      sc.pp.highly_variable_genes(train_obj, n_top_genes=DE_GENES_NUM)
+      sc.pp.highly_variable_genes(train_obj, n_top_genes=de_genes_num)
       highly_variable_index =  train_obj.var.highly_variable
       if highly_variable_index.sum() < 1200 or highly_variable_index.sum() > 5000:
         train_obj.var["std"] = sc.get.obs_df(train_obj.raw.to_adata(),list(train_obj.var.index)).std()
@@ -497,9 +489,8 @@ def run_scNET(ann_file, train_obj, save_dir, pre_processing_flag = True ,biogrid
       loader = mini_batch_cells(x, train_obj.obsp["distances"], x.shape[1] // number_of_batches, labels=labels)
     
     data = Data(x,ppi_edge_index)
-    data = train_test_split_edges(data,test_ratio=0.2, val_ratio=0)
-    model = train(data, loader, highly_variable_index, save_dir, number_of_batches=number_of_batches, max_epoch=max_epoch, 
-                    rduce_interavel=30,model_name=model_name, cell_flag=split_cells, num_classes=num_classes)
+    data = train_test_split_edges(data, test_ratio=0.2, val_ratio=0)
+    model = train(data, loader, highly_variable_index, save_dir, cfg, rduce_interavel=30, num_classes=num_classes)
 
     if save_model_flag:
       save_model(pkg_resources.resource_filename(__name__, r"Models/scNET_" + model_name + ".pt"), model)
