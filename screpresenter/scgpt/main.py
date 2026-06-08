@@ -799,69 +799,73 @@ def run_scGPT(hyperparameter_defaults, adata, save_dir):
         return total_loss / total_num, total_error / total_num
 
 
-    best_val_loss = float("inf")
-    best_model = None
-    global_step=0
-    for epoch in range(1, epochs + 1):
+    if config["do_train"]:
+        best_val_loss = float("inf")
+        best_model = None
+        global_step=0
+        for epoch in range(1, epochs + 1):
 
-        epoch_start_time = time.time()
-        train_data_pt, valid_data_pt = prepare_data(
-                tokenized_train=tokenized_train,
-                tokenized_valid=tokenized_valid,
-                train_batch_labels=train_batch_labels,
-                valid_batch_labels=valid_batch_labels,
-                train_celltype_labels=train_celltype_labels,
-                valid_celltype_labels=valid_celltype_labels,
-                train_cell_names=train_cell_names,
-                valid_cell_names=valid_cell_names,
-                mask_ratio=mask_ratio,
-                mask_value=mask_value,
-                pad_value=pad_value
-        )
-        train_loader = prepare_dataloader(
-            train_data_pt,
-            batch_size=batch_size,
-            shuffle=False,
-            intra_domain_shuffle=True,
-            drop_last=False,
-        )
-        valid_loader = prepare_dataloader(
-            valid_data_pt,
-            batch_size=eval_batch_size,
-            shuffle=False,
-            intra_domain_shuffle=False,
-            drop_last=False,
-        )
+            epoch_start_time = time.time()
+            train_data_pt, valid_data_pt = prepare_data(
+                    tokenized_train=tokenized_train,
+                    tokenized_valid=tokenized_valid,
+                    train_batch_labels=train_batch_labels,
+                    valid_batch_labels=valid_batch_labels,
+                    train_celltype_labels=train_celltype_labels,
+                    valid_celltype_labels=valid_celltype_labels,
+                    train_cell_names=train_cell_names,
+                    valid_cell_names=valid_cell_names,
+                    mask_ratio=mask_ratio,
+                    mask_value=mask_value,
+                    pad_value=pad_value
+            )
+            train_loader = prepare_dataloader(
+                train_data_pt,
+                batch_size=batch_size,
+                shuffle=False,
+                intra_domain_shuffle=True,
+                drop_last=False,
+            )
+            valid_loader = prepare_dataloader(
+                valid_data_pt,
+                batch_size=eval_batch_size,
+                shuffle=False,
+                intra_domain_shuffle=False,
+                drop_last=False,
+            )
 
-        if config["do_train"]:
+
             train_embs, train_cls, global_step = train(
                 model,
                 loader=train_loader,
                 global_step=global_step,
             )
-        val_loss, val_err = evaluate(
-            model,
-            loader=valid_loader,
-        )
-        elapsed = time.time() - epoch_start_time
-        logger.info("-" * 89)
-        logger.info(
-            f"| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | "
-            f"valid loss/mse {val_loss:5.4f} | err {val_err:5.4f}"
-        )
-        logger.info("-" * 89)
+            val_loss, val_err = evaluate(
+                model,
+                loader=valid_loader,
+            )
+            elapsed = time.time() - epoch_start_time
+            logger.info("-" * 89)
+            logger.info(
+                f"| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | "
+                f"valid loss/mse {val_loss:5.4f} | err {val_err:5.4f}"
+            )
+            logger.info("-" * 89)
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            best_model = copy.deepcopy(model)
-            logger.info(f"Best model with score {best_val_loss:5.4f}")
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                best_model = copy.deepcopy(model)
+                logger.info(f"Best model with score {best_val_loss:5.4f}")
 
-        scheduler.step()
-        if DAB_separate_optim:
-            scheduler_dab.step()
-        if ADV:
-            scheduler_D.step()
-            scheduler_E.step()
+            scheduler.step()
+            if DAB_separate_optim:
+                scheduler_dab.step()
+            if ADV:
+                scheduler_D.step()
+                scheduler_E.step()
+
+    else:
+        best_model = copy.deepcopy(model)
 
 
     # %% inference
@@ -922,20 +926,7 @@ def run_scGPT(hyperparameter_defaults, adata, save_dir):
             model,
             loader=test_loader,
             return_raw=True,
-        )
-
-        ## Retrieve the data-independent gene embeddings from scGPT
-        #gene2idx = vocab.get_stoi()
-        #final_gene_ids = np.array([id for id in gene2idx.values()])
-        #gene_embeddings = model.encoder(torch.tensor(final_gene_ids, dtype=torch.long).to(device))
-        #gene_embeddings = gene_embeddings.detach().cpu().numpy()
-        ## Filter on the intersection between the Immune Human HVGs found in step 1.2 and scGPT's 30+K foundation model vocab
-        #gene_embeddings = {gene: gene_embeddings[i] for i, gene in enumerate(gene2idx.keys()) if gene in adata.var.index.tolist()}
-        #print('Retrieved gene embeddings for {} genes.'.format(len(gene_embeddings)))
-        #
-        #with open(save_dir / "gene_embeddings.pkl", "wb+") as f:
-        #    pickle.dump(gene_embeddings, f)
-        
+        )        
 
         accuracy = accuracy_score(celltypes_labels, predictions)
         precision = precision_score(celltypes_labels, predictions, average="macro")

@@ -7,6 +7,7 @@ faulthandler.enable()
 from sklearn.model_selection import train_test_split
 from .scgpt import run_scGPT
 import pickle
+import scipy
 
 
 
@@ -74,7 +75,9 @@ def combine_embeddings(obj, scnet_emb, scgpt_emb, dir):
     avg_combined_embs = pd.DataFrame((common_scgpt_embs.values + common_scnet_embs.values) / 2, index=common_test_idx)
     conq_combined_embs = pd.concat([common_scgpt_embs, common_scnet_embs], axis=1)
 
-    obj_common.X = obj_common.X.toarray()
+    if scipy.sparse.issparse(obj_common.X):
+          obj_common.X = obj_common.X.toarray()
+
     obj_common.obsm["X_scnet"] = common_scnet_embs.values
     obj_common.obsm["X_scgpt"] = common_scgpt_embs.values
     obj_common.obsm["X_combined_avg"] = avg_combined_embs.values

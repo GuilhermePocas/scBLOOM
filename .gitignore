@@ -9,3 +9,6 @@ screpresenter/scgpt/checkpoints/*
 screpresenter/networks/knowledge sources/*
 
 scripts/*
+
+data/cell_types.csv
+data/raw_dataset.csv
