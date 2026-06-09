@@ -34,20 +34,25 @@ def train_scgpt(obj, dir, cfg):
     obj_scGPT = obj.copy()
     obj_scGPT.var_names = obj_scGPT.var_names.str.upper()
 
-    train_idx, test_idx = train_test_split(
-        obj_scGPT.obs_names,
-        test_size=cfg['test_size'],
-        stratify=obj.obs["celltype"], 
-        random_state=42
-    )
+    if cfg['test_size'] == 1.0:
+        obj_scGPT_test = obj_scGPT.copy()
+        obj_scGPT_batch = obj_scGPT_test.copy()
+        obj_scGPT_batch.obs["str_batch"] = "1"
+    else:
+        train_idx, test_idx = train_test_split(
+            obj_scGPT.obs_names,
+            test_size=cfg['test_size'],
+            stratify=obj.obs["celltype"], 
+            random_state=42
+        )
 
-    obj_scGPT_test = obj_scGPT[test_idx].copy()
-    obj_scGPT_train = obj_scGPT[train_idx].copy()
-
-    obj_scGPT_batch = obj_scGPT_train.concatenate(obj_scGPT_test, batch_key="str_batch")
+        obj_scGPT_test = obj_scGPT[test_idx].copy()
+        obj_scGPT_train = obj_scGPT[train_idx].copy()
+        obj_scGPT_batch = obj_scGPT_train.concatenate(obj_scGPT_test, batch_key="str_batch", index_unique=None)
 
     scGPT_dir = dir + "/scGPT"
     os.makedirs(scGPT_dir, exist_ok=True)
+
     run_scGPT(cfg ,obj_scGPT_batch, scGPT_dir)
 
     with open(scGPT_dir + "/test_cell_embeddings.pkl", "rb") as f:
@@ -56,13 +61,14 @@ def train_scgpt(obj, dir, cfg):
     scgpt_cell_embeddings.index.name = "cell_id"
 
     scgpt_labels = obj_scGPT_batch.obs.loc[scgpt_cell_embeddings.index, "celltype"].values
-    scgpt_cell_embeddings.index = scgpt_cell_embeddings.index.str.replace(r"-[01]$", "", regex=True)
 
     return scgpt_cell_embeddings, scgpt_labels
 
 def combine_embeddings(obj, scnet_emb, scgpt_emb, dir):
 
     common_test_idx = scgpt_emb.index.intersection(scnet_emb.index)
+    print(scgpt_emb.index)
+    print(scnet_emb.index)
     obj_common = obj[common_test_idx].copy()
     print(f"Test cells in common: {len(common_test_idx)} / {len(scgpt_emb.index)}")
 

@@ -319,6 +319,8 @@ def run_scGPT(hyperparameter_defaults, adata, save_dir):
     )
     adata_test = adata[adata.obs["str_batch"] == "1"]
     adata = adata[adata.obs["str_batch"] == "0"]
+    if not config["do_train"]:
+        adata = adata_test.copy()
 
     preprocessor(adata, batch_key=None)
     preprocessor(adata_test, batch_key=None)
