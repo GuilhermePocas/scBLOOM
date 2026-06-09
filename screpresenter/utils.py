@@ -67,8 +67,6 @@ def train_scgpt(obj, dir, cfg):
 def combine_embeddings(obj, scnet_emb, scgpt_emb, dir):
 
     common_test_idx = scgpt_emb.index.intersection(scnet_emb.index)
-    print(scgpt_emb.index)
-    print(scnet_emb.index)
     obj_common = obj[common_test_idx].copy()
     print(f"Test cells in common: {len(common_test_idx)} / {len(scgpt_emb.index)}")
 
